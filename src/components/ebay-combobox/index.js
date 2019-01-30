@@ -28,7 +28,7 @@ function getInitialState(input) {
 
     const selectedOption = options.filter(option => option.selected)[0] || options[0];
 
-    if (options.length > 0 && selectedOption.value === options[0].value) {
+    if (input.readonly && options.length > 0 && selectedOption.value === options[0].value) {
         options[0].selected = true;
     }
 
@@ -64,7 +64,8 @@ function getTemplateData(state) {
         selectedOption: state.selected,
         options: state.options,
         grow: state.grow,
-        disabled: state.disabled
+        disabled: state.disabled,
+        readonly: state.htmlAttributes.readonly
     };
 }
 
@@ -74,7 +75,9 @@ function init() {
     if (this.state.options && this.state.options.length > 0) {
         this.expander = new Expander(this.el, {
             autoCollapse: true,
-            expandOnClick: !this.state.disabled,
+            expandOnFocus: !this.readonly,
+            expandOnClick: this.readonly && !this.state.disabled,
+            collapseOnFocusOut: !this.readonly,
             contentSelector: `.${comboboxOptionsClass}`,
             hostSelector: comboboxHostSelector,
             expandedClass: 'combobox--expanded',
@@ -104,11 +107,21 @@ function init() {
 
 function handleExpand() {
     elementScroll.scroll(this.el.querySelector(comboboxSelectedOptionSelector));
+    this.moveCursorToEnd();
     emitAndFire(this, 'combobox-expand');
 }
 
 function handleCollapse() {
     emitAndFire(this, 'combobox-collapse');
+}
+
+function moveCursorToEnd() {
+    const currentInput = this.el.querySelector(`${comboboxHostSelector}[type="text"]`);
+
+    if (currentInput) {
+        const len = currentInput.value.length;
+        currentInput.setSelectionRange(len, len);
+    }
 }
 
 /**
@@ -161,6 +174,7 @@ function handleComboboxKeyDown(event) {
 
         this.setState('options', options);
         this.processAfterStateChange(optionEls[selectElementIndex]);
+        this.moveCursorToEnd();
     });
 
     eventUtils.handleEscapeKeydown(event, () => {
@@ -243,6 +257,7 @@ module.exports = markoWidgets.defineComponent({
     init,
     handleExpand,
     handleCollapse,
+    moveCursorToEnd,
     handleOptionClick,
     handleComboboxKeyDown,
     processAfterStateChange,
