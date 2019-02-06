@@ -8,7 +8,7 @@
     w-bind>
     <span class=data.btnClass w-preserve-attrs="class">
         <input
-            type=(data.readonly ? 'button': 'text')
+            type='text'
             readonly=data.readonly
             value=(data.selectedOption && data.selectedOption.text)
             disabled=data.disabled
@@ -33,7 +33,7 @@
             ${option.htmlAttributes}
             tabindex="-1"
             w-on-click='handleOptionClick'
-            w-preserve-attrs="tabindex,data-makeup-index"
+            w-preserve-attrs="tabindex,data-makeup-index,class"
             aria-selected=String(option.selected)
             data-option-value=option.value>
             <span>

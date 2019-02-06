@@ -58,6 +58,7 @@ function handleResize(ev) {
 }
 
 module.exports = {
+    handleKeydown,
     handleActionKeydown,
     handleEscapeKeydown,
     handleUpDownArrowsKeydown,

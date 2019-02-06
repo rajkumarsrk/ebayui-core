@@ -26,11 +26,7 @@ function getInitialState(input) {
         renderBody: option.renderBody
     }));
 
-    const selectedOption = options.filter(option => option.selected)[0] || options[0];
-
-    if (input.readonly && options.length > 0 && selectedOption.value === options[0].value) {
-        options[0].selected = true;
-    }
+    const selectedOption = options.filter(option => option.selected)[0];
 
     return {
         htmlAttributes: processHtmlAttributes(input),
@@ -100,7 +96,6 @@ function init() {
             observer.observeInner(this, optionEl, 'selected', `options[${i}]`, 'options', selectedObserverCallback);
         });
 
-        scrollKeyPreventer.add(this.el.querySelector(comboboxHostSelector));
         scrollKeyPreventer.add(this.el.querySelector(`.${comboboxOptionsClass}`));
     }
 }
@@ -157,6 +152,8 @@ function handleComboboxKeyDown(event) {
         const optionEls = this.el.querySelectorAll(comboboxOptionSelector);
         let selectElementIndex = currentSelectedIndex;
 
+        optionEls.forEach(optionEl => optionEl.classList.remove('combobox__option--active'));
+
         switch (event.charCode || event.keyCode) {
             // down
             case 40:
@@ -170,7 +167,9 @@ function handleComboboxKeyDown(event) {
                 break;
         }
 
-        options[selectElementIndex].selected = true;
+        optionEls[selectElementIndex].classList.add('combobox__option--active');
+
+        // options[selectElementIndex].selected = true;
 
         this.setState('options', options);
         this.processAfterStateChange(optionEls[selectElementIndex]);
@@ -180,6 +179,10 @@ function handleComboboxKeyDown(event) {
     eventUtils.handleEscapeKeydown(event, () => {
         this.expander.collapse();
         this.el.querySelector(comboboxHostSelector).focus();
+    });
+
+    eventUtils.handleKeydown([13], event, () => {
+        this.expander.collapse();
     });
 }
 
