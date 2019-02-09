@@ -16,17 +16,26 @@ const comboboxOptionSelector = '.combobox__option[role=option]';
 const comboboxSelectedOptionSelector = '.combobox__option[role=option][aria-selected=true]';
 
 function getInitialState(input) {
-    const options = (input.options || []).map(option => ({
+    let options = (input.options || []).map(option => ({
         htmlAttributes: processHtmlAttributes(option),
         class: option.class,
         style: option.style,
         value: option.value,
         text: option.text,
         selected: Boolean(option.selected),
-        renderBody: option.renderBody
+        renderBody: option.renderBody,
+        visible: Boolean(option.selected)
     }));
 
-    const selectedOption = options.filter(option => option.selected)[0];
+    const selectedOption = options.find(option => option.selected);
+    const selectedOptionText = selectedOption && selectedOption.text;
+
+    if (!selectedOptionText) {
+        options = options.map(option => {
+            option.visible = true;
+            return option;
+        });
+    }
 
     return {
         htmlAttributes: processHtmlAttributes(input),
@@ -34,7 +43,7 @@ function getInitialState(input) {
         style: input.style,
         name: input.name,
         options,
-        selected: selectedOption,
+        selectedOptionText,
         grow: input.grow,
         disabled: input.disabled,
         borderless: Boolean(input.borderless)
@@ -57,7 +66,7 @@ function getTemplateData(state) {
         btnClass,
         optionsClass,
         name: state.name,
-        selectedOption: state.selected,
+        selectedOptionText: state.selectedOptionText,
         options: state.options,
         grow: state.grow,
         disabled: state.disabled,
@@ -66,7 +75,7 @@ function getTemplateData(state) {
 }
 
 function init() {
-    const optionEls = this.el.querySelectorAll(comboboxOptionSelector);
+    const optionEls = getOptionEls(this.el);
 
     if (this.state.options && this.state.options.length > 0) {
         this.expander = new Expander(this.el, {
@@ -149,7 +158,7 @@ function handleComboboxKeyDown(event) {
     eventUtils.handleUpDownArrowsKeydown(event, () => {
         const currentSelectedIndex = this.state.options.findIndex(option => option.selected);
         const options = clearComboboxSelections(this.state.options);
-        const optionEls = this.el.querySelectorAll(comboboxOptionSelector);
+        const optionEls = getOptionEls(this.el);
         let selectElementIndex = currentSelectedIndex;
 
         optionEls.forEach(optionEl => optionEl.classList.remove('combobox__option--active'));
@@ -174,6 +183,8 @@ function handleComboboxKeyDown(event) {
         this.setState('options', options);
         this.processAfterStateChange(optionEls[selectElementIndex]);
         this.moveCursorToEnd();
+
+        event.preventDefault();
     });
 
     eventUtils.handleEscapeKeydown(event, () => {
@@ -183,6 +194,31 @@ function handleComboboxKeyDown(event) {
 
     eventUtils.handleKeydown([13], event, () => {
         this.expander.collapse();
+    });
+}
+
+function handleComboboxKeyUp(event) {
+    const newValue = event.target.value;
+    this.setState('selectedOptionText', newValue);
+    this.filterOptionsDisplay(newValue);
+}
+
+function getOptionEls(el) {
+    return el.querySelectorAll(comboboxOptionSelector);
+}
+
+function filterOptionsDisplay(query) {
+    const options = this.state.options;
+
+    if (!query) {
+        return;
+    }
+
+    options.map(option => {
+        option.visible = (option.text.toLowerCase().indexOf(query.toLowerCase()) > -1);
+        this.setState('visible', option);
+        this.update();
+        return option;
     });
 }
 
@@ -263,6 +299,8 @@ module.exports = markoWidgets.defineComponent({
     moveCursorToEnd,
     handleOptionClick,
     handleComboboxKeyDown,
+    handleComboboxKeyUp,
+    filterOptionsDisplay,
     processAfterStateChange,
     setSelectedOption,
     clearComboboxSelections

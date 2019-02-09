@@ -10,12 +10,13 @@
         <input
             type='text'
             readonly=data.readonly
-            value=(data.selectedOption && data.selectedOption.text)
+            value=data.selectedOptionText
             disabled=data.disabled
             aria-haspopup='listbox'
             aria-owns=widget.elId('combobox__options')
             aria-expanded='false'
             w-on-keydown='handleComboboxKeyDown'
+            w-on-keyup='handleComboboxKeyUp'
             w-preserve-attrs="aria-expanded"
             ${data.htmlAttributes}/>
         <span class="combobox__icon" aria-hidden="true"></span>
@@ -27,6 +28,7 @@
         class=data.optionsClass>
         <div
             for(option in data.options)
+            if(option.visible)
             role='option'
             class=['combobox__option', option.class]
             style=option.style
@@ -39,18 +41,6 @@
             <span>
                 ${option.text}
             </span>
-            <span class='combobox__status'/>
         </div>
     </div>
-    <select
-        hidden
-        class='combobox__native'
-        name=data.name>
-        <option
-            for(option in data.options)
-            value=option.value
-            selected=option.selected
-            class=option.class>
-        </option>
-    </select>
 </span>
