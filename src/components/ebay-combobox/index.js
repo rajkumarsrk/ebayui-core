@@ -208,18 +208,13 @@ function getOptionEls(el) {
 }
 
 function filterOptionsDisplay(query) {
-    const options = this.state.options;
-
-    if (!query) {
-        return;
-    }
-
-    options.map(option => {
-        option.visible = (option.text.toLowerCase().indexOf(query.toLowerCase()) > -1);
-        this.setState('visible', option);
-        this.update();
+    const options = this.state.options.map(option => {
+        const shouldBeVisible = (query === '') ? true : (option.text.toLowerCase().indexOf(query.toLowerCase()) > -1);
+        option.visible = shouldBeVisible;
         return option;
     });
+    this.setState('options', options);
+    this.update();
 }
 
 /**
