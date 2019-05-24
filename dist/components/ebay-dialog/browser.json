@@ -1,0 +1,10 @@
+{
+    "dependencies": [
+        "require: ./index.js",
+        "../ebay-icon",
+        {
+            "if-not-flag": "ebayui-no-skin",
+            "path": "@ebay/skin/dialog"
+        }
+    ]
+}

@@ -1,0 +1,70 @@
+<script marko-init>
+    var processHtmlAttributes = require("../../common/html-attributes");
+</script>
+
+<var options=data.options/>
+<var selectedOption=options[data.selectedIndex]/>
+<var selectedText=(selectedOption && selectedOption.text)/>
+
+<span
+    ${processHtmlAttributes(data)}
+    class=["listbox", data.class]
+    style=data.style
+    w-preserve-attrs="class"
+    w-on-expander-expand="handleExpand"
+    w-on-expander-collapse="handleCollapse"
+    w-bind>
+    <button
+        w-id="button"
+        class=[
+            "listbox__control",
+            "expand-btn",
+            "expand-btn--regular",
+            data.borderless && "expand-btn--borderless"
+        ]
+        value=selectedText
+        disabled=data.disabled
+        aria-haspopup="listbox"
+        w-preserve-attrs="aria-expanded,aria-controls">
+        <span class="expand-btn__cell">
+            <span>${selectedText}</span>
+            <span class="expand-btn__icon"></span>
+        </span>
+    </button>
+
+    <if(options.length)>
+        <div
+            w-id="options"
+            role="listbox"
+            class="listbox__options"
+            tabindex="-1"
+            w-preserve-attrs="class,aria-owns,aria-activedescendant,tabindex">
+            <for(option in data.options)>
+                <div
+                    w-id="option[]"
+                    w-preserve-attrs="class,data-makeup-index,aria-selected"
+                    class=["listbox__option", option.class]
+                    style=option.style
+                    role="option"
+                    tabindex="-1"
+                    aria-selected=(selectedOption === option && "true")
+                    ${processHtmlAttributes(option)}>
+                    <span>${option.text}</span>
+                    <span class="listbox__status"/>
+                </div>
+            </for>
+        </div>
+    </if>
+    <select
+        hidden
+        class="listbox__native"
+        name=data.name>
+        <for(option in data.options)>
+            <option
+                value=option.value
+                selected=(option === selectedOption)
+                class=option.class>
+            </option>
+        </for>
+    </select>
+</span>

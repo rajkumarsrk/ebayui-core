@@ -1,0 +1,28 @@
+<script marko-init>
+    var processHtmlAttributes = require("../../common/html-attributes");
+</script>
+
+<nav w-bind
+    aria-labelledby=widget.elId("breadcrumb-heading")
+    class=["breadcrumb", data.class]
+    style=data.style
+    role="navigation"
+    ${processHtmlAttributes(data)}>
+
+    <${data.a11yHeadingTag || "h2"} id=widget.elId("breadcrumb-heading") class="clipped">
+        ${data.a11yHeadingText}
+    </>
+    <ul>
+        <li for(item in data.items | status-var="status")>
+            <var current=(!item.href && status.isLast())/>
+            <${item.href ? "a" : "button"}
+                href=item.href
+                aria-current=(current && "location")
+                class=item.class
+                style=item.style
+                w-body=item.renderBody
+                w-onclick=(!current && "handleClick")
+                ${processHtmlAttributes(item)}/>
+        </li>
+    </ul>
+</nav>

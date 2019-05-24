@@ -1,0 +1,14 @@
+{
+    "dependencies": [
+        {
+            "if-not-flag": "ebayui-no-skin",
+            "dependencies": [
+                "@ebay/skin/actionable",
+                "@ebay/skin/button"
+            ]
+        },
+        "../ebay-badge",
+        "../ebay-icon",
+        "require: ./index.js"
+    ]
+}

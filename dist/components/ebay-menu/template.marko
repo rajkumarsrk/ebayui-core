@@ -1,0 +1,61 @@
+<span
+    class=data.menuClass
+    style=data.style
+    w-bind
+    w-on-expander-expand="handleExpand"
+    w-on-expander-collapse="handleCollapse"
+    ${data.htmlAttributes}>
+    <ebay-button
+        w-id="button"
+        class=data.buttonClass
+        variant="expand"
+        size=data.size
+        priority=data.priority
+        no-text=data.noText
+        aria-expanded=String(data.expanded)
+        aria-haspopup="true"
+        aria-label=data.a11yText
+        disabled=data.disabled
+        w-on-button-escape="handleButtonEscape">
+        <span class=['expand-btn__cell', (data.customLabel && 'menu__control--custom-label')]>
+        <if(data.customLabel)>
+            <span w-body=data.customLabel body-only-if(true)/>
+        </if>
+        <else>
+            <!-- Convoluted markup to satisfy both Skin and Marko -->
+            <div if(data.icon) w-preserve-body class="btn__icon">
+                <span if(data.iconTag) w-body=data.iconTag body-only-if(true)/>
+            </div>
+            <span if(data.text)>${data.text}</span>
+        </else>
+        <ebay-icon if(!data.noToggleIcon) type="inline" name="chevron-down-bold" class="expand-btn__icon" no-skin-classes/>
+        </span>
+    </ebay-button>
+    <!-- w-id needed for proper DOM diffing with makeup -->
+    <span w-id="content" class=data.itemsClass role=data.role>
+        <for(item in data.items)>
+            <${item.tag}
+                class=item.classes
+                style=item.style
+                aria-checked=(data.isNotCheckable ? false : String(item.checked))
+                aria-current=((data.isNotCheckable && item.current) ? 'page' : false)
+                href=item.href
+                role=item.role
+                w-onclick="handleItemClick"
+                w-onkeydown="handleItemKeydown"
+                w-onkeypress="handleItemKeypress"
+                w-preserve-attrs="tabindex,data-makeup-index"
+                ${item.htmlAttributes}>
+                <span>
+                    <span body-only-if(!item.badgeNumber) aria-hidden='true'>
+                        <span w-body=item.renderBody/>
+                        <if(item.badgeNumber)>
+                            <ebay-badge type='menu' number=item.badgeNumber/>
+                        </if>
+                    </span>
+                </span>
+                <span if(item.useCheckIcon) class="menu__status"/>
+            </>
+        </for>
+    </span>
+</span>
