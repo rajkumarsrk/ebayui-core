@@ -1,0 +1,531 @@
+'use strict';var _extends = Object.assign || function (target) {for (var i = 1; i < arguments.length; i++) {var source = arguments[i];for (var key in source) {if (Object.prototype.hasOwnProperty.call(source, key)) {target[key] = source[key];}}}return target;};var focusables = require('makeup-focusables');
+var resizeUtil = require('../../common/event-utils').resizeUtil;
+var emitAndFire = require('../../common/emit-and-fire');
+var processHtmlAttributes = require('../../common/html-attributes');
+var observer = require('../../common/property-observer');
+var onScroll = require('./utils/on-scroll-debounced');
+var scrollTransition = require('./utils/scroll-transition');
+var template = require('./template.marko');
+
+// Used for carousel slide direction.
+var LEFT = -1;
+var RIGHT = 1;
+
+function getInitialState(input) {
+    var gap = parseInt(input.gap, 10);
+    var state = {
+        htmlAttributes: processHtmlAttributes(input),
+        classes: ['carousel', input.class],
+        style: input.style,
+        config: {}, // A place to store values that should not trigger an update by themselves.
+        gap: isNaN(gap) ? 16 : gap,
+        noDots: input.noDots,
+        index: parseInt(input.index, 10) || 0,
+        itemsPerSlide: parseFloat(input.itemsPerSlide, 10) || undefined,
+        a11yPreviousText: input.a11yPreviousText || 'Previous Slide',
+        a11yNextText: input.a11yNextText || 'Next Slide',
+        a11yStatusText: input.a11yStatusText || 'Showing Slide {currentSlide} of {totalSlides} - Carousel',
+        a11yStatusTag: input.a11yStatusTag || 'span',
+        a11yCurrentText: input.a11yCurrentText || 'Current Slide {currentSlide} - Carousel',
+        a11yOtherText: input.a11yOtherText || 'Slide {slide} - Carousel',
+        a11yPauseText: input.a11yPauseText || 'Pause - Carousel',
+        a11yPlayText: input.a11yPlayText || 'Play - Carousel' };var
+
+
+    itemsPerSlide = state.itemsPerSlide;
+    if (itemsPerSlide) {
+        state.peek = itemsPerSlide % 1;
+        state.itemsPerSlide = itemsPerSlide - state.peek;
+        state.classes.push('carousel--slides');
+
+        if (state.peek) {
+            state.classes.push('carousel--peek');
+            state.noDots = true;
+        }
+
+        // Only allow autoplay option for discrete carousels.
+        if (input.autoplay) {
+            var isSingleSlide = input.items.length <= itemsPerSlide;
+            state.autoplayInterval = parseInt(input.autoplay, 10) || 4000;
+            state.classes.push('carousel__autoplay');
+            state.paused = isSingleSlide || input.paused; // Force paused state if not enough slides provided;
+        }
+    }
+
+    state.items = (input.items || []).map(function (item, i) {
+        var isStartOfSlide = state.itemsPerSlide ? i % state.itemsPerSlide === 0 : true;
+        return {
+            htmlAttributes: processHtmlAttributes(item),
+            class: isStartOfSlide ? ['carousel__snap-point', item.class] : item.class,
+            style: item.style,
+            renderBody: item.renderBody };
+
+    });
+
+    return state;
+}
+
+function getTemplateData(state) {var
+    config = state.config,autoplayInterval = state.autoplayInterval,items = state.items,itemsPerSlide = state.itemsPerSlide,slideWidth = state.slideWidth,gap = state.gap;
+    var hasOverride = config.offsetOverride !== undefined;
+    var isSingleSlide = items.length <= itemsPerSlide;
+    state.index = normalizeIndex(state, state.index);
+
+    var offset = getOffset(state);
+    var prevControlDisabled = isSingleSlide || !autoplayInterval && offset === 0;
+    var nextControlDisabled = isSingleSlide || !autoplayInterval && offset === getMaxOffset(state);
+    var bothControlsDisabled = prevControlDisabled && nextControlDisabled;
+    var slide = void 0,itemWidth = void 0,totalSlides = void 0,a11yStatusText = void 0;
+
+    if (itemsPerSlide) {
+        var itemsInSlide = itemsPerSlide + state.peek;
+        slide = getSlide(state);
+        itemWidth = 'calc(' + 100 / itemsInSlide + '% - ' + (itemsInSlide - 1) * gap / itemsInSlide + 'px)';
+        totalSlides = getSlide(state, items.length);
+        a11yStatusText = state.a11yStatusText.
+        replace('{currentSlide}', slide + 1).
+        replace('{totalSlides}', totalSlides);
+    }
+
+    items.forEach(function (item, i) {var
+        style = item.style,transform = item.transform;
+        var marginRight = i !== items.length - 1 && gap + 'px';
+
+        // Account for users providing a style string or object for each item.
+        if (typeof style === 'string') {
+            item.style = style + ';flex-basis:' + itemWidth + ';margin-right:' + marginRight + ';';
+            if (transform) item.style += 'transform:' + transform;
+        } else {
+            item.style = _extends({}, style, {
+                'width': itemWidth,
+                'margin-right': marginRight,
+                transform: transform });
+
+        }
+
+        item.fullyVisible =
+        item.left === undefined ||
+        item.left - offset >= -0.01 &&
+        item.right - offset <= slideWidth + 0.01;
+
+    });
+
+    var data = _extends({}, state, {
+        items: items,
+        slide: slide,
+        offset: hasOverride ? config.offsetOverride : offset,
+        disableTransition: hasOverride,
+        totalSlides: totalSlides,
+        a11yStatusText: a11yStatusText,
+        prevControlDisabled: prevControlDisabled,
+        nextControlDisabled: nextControlDisabled,
+        bothControlsDisabled: bothControlsDisabled });
+
+
+    return data;
+}
+
+function init() {var _this = this;var _state =
+    this.state,config = _state.config,autoplayInterval = _state.autoplayInterval;
+    this.listEl = this.getEl('list');
+    this.nextEl = this.getEl('next');
+    this.containerEl = this.getEl('container');
+    this.emitUpdate = emitUpdate.bind(this);
+    this.subscribeTo(resizeUtil).on('resize', function () {
+        cleanupAsync.call(_this);
+        onRender.call(_this);
+    });
+    observer.observeRoot(this, ['index']);
+    if (autoplayInterval) {
+        observer.observeRoot(this, ['paused']);
+    }
+
+    if (isNativeScrolling(this.listEl)) {
+        config.nativeScrolling = true;
+        this.once('destroy', onScroll(this.listEl, function () {
+            if (!config.scrollTransitioning) {
+                handleScroll.call(_this, _this.listEl.scrollLeft);
+            }
+        }));
+    } else {
+        this.subscribeTo(this.listEl).on('transitionend', function (_ref) {var target = _ref.target;
+            if (target === _this.listEl) {
+                _this.emitUpdate();
+            }
+        });
+    }
+}
+
+function onRender() {var _this2 = this;var
+    containerEl = this.containerEl,listEl = this.listEl,state = this.state;var
+    config = state.config,items = state.items,autoplayInterval = state.autoplayInterval,paused = state.paused;
+
+    // Do nothing for empty carousels.
+    if (!items.length) {
+        return;
+    }
+
+    // Force a rerender to start the offset override animation.
+    if (config.offsetOverride) {
+        config.offsetOverride = undefined;
+        this.renderFrame = requestAnimationFrame(function () {return _this2.setStateDirty();});
+        return;
+    }
+
+    // Track if we are on a normal render or a render caused by recalculating.
+    if (config.preserveItems) {
+        config.preserveItems = false;
+
+        // Ensure only visible items within the carousel are focusable.
+        // We don't have access to these items in the template so me must update manually.
+        forEls(listEl, function (itemEl) {
+            focusables(itemEl).forEach(itemEl.getAttribute('aria-hidden') !== 'true' ?
+            function (child) {return child.removeAttribute('tabindex');} :
+            function (child) {return child.setAttribute('tabindex', '-1');});
+
+        });
+
+        if (config.nativeScrolling) {
+            if (config.skipScrolling) {
+                this.emitUpdate();
+                config.skipScrolling = false;
+            } else {
+                var offset = getOffset(state);
+                if (offset !== listEl.scrollLeft) {
+                    // Animate to the new scrolling position and emit update events afterward.
+                    config.scrollTransitioning = true;
+                    this.cancelScrollTransition = scrollTransition(listEl, offset, this.emitUpdate);
+                }
+            }
+        }
+
+        if (autoplayInterval && !paused) {
+            var moveRight = this.move.bind(this, RIGHT);
+            this.autoplayTimeout = setTimeout(function () {
+                if (_this2.isMoving) {
+                    return _this2.once('carousel-update', moveRight);
+                }
+                moveRight();
+            }, autoplayInterval);
+        }
+
+        return;
+    }
+
+    // Otherwise recalculates the items / slide sizes.
+    this.renderFrame = requestAnimationFrame(function () {var _containerEl$getBound =
+        containerEl.getBoundingClientRect(),containerWidth = _containerEl$getBound.width;var _listEl$firstElementC =
+        listEl.firstElementChild.getBoundingClientRect(),currentLeft = _listEl$firstElementC.left;
+
+        _this2.setStateDirty('slideWidth', containerWidth);
+        config.preserveItems = true;
+        config.nativeScrolling = isNativeScrolling(listEl);
+
+        // Update item positions in the dom.
+        forEls(listEl, function (itemEl, i) {
+            var item = items[i];var _itemEl$getBoundingCl =
+            itemEl.getBoundingClientRect(),left = _itemEl$getBoundingCl.left,right = _itemEl$getBoundingCl.right;
+            item.left = left - currentLeft;
+            item.right = right - currentLeft;
+        });
+    });
+}
+
+/**
+   * Called before updates and before the widget is destroyed to remove any pending async timers / actions.
+   */
+function cleanupAsync() {
+    clearTimeout(this.autoplayTimeout);
+    cancelAnimationFrame(this.renderFrame);
+
+    if (this.cancelScrollTransition) {
+        this.cancelScrollTransition();
+        this.cancelScrollTransition = undefined;
+    }
+}
+
+function emitUpdate() {var _state2 =
+    this.state,config = _state2.config,items = _state2.items;
+    config.scrollTransitioning = false;
+    emitAndFire(this, 'carousel-update', {
+        visibleIndexes: items.
+        filter(function (_ref2) {var fullyVisible = _ref2.fullyVisible;return fullyVisible;}).
+        map(function (item) {return items.indexOf(item);}) });
+
+}
+
+/**
+   * Moves the carousel in the `data-direction` of the clicked element if possible.
+   *
+   * @param {MouseEvent} originalEvent
+   * @param {HTMLElement} target
+   */
+function handleMove(originalEvent, target) {
+    if (this.isMoving) {
+        return;
+    }var
+    state = this.state;
+    var direction = parseInt(target.getAttribute('data-direction'), 10);
+    var nextIndex = this.move(direction);
+    var slide = getSlide(state, nextIndex);
+    emitAndFire(this, 'carousel-slide', { slide: slide + 1, originalEvent: originalEvent });
+    emitAndFire(this, 'carousel-' + (direction === 1 ? 'next' : 'previous'), { originalEvent: originalEvent });
+}
+
+/**
+   * Moves the carousel to the slide at `data-slide` for the clicked element if possible.
+   *
+   * @param {MouseEvent} originalEvent
+   * @param {HTMLElement} target
+   */
+function handleDotClick(originalEvent, target) {
+    if (this.isMoving) {
+        return;
+    }var _state3 =
+    this.state,config = _state3.config,itemsPerSlide = _state3.itemsPerSlide;
+    var slide = parseInt(target.getAttribute('data-slide'), 10);
+    config.preserveItems = true;
+    this.setState('index', slide * itemsPerSlide);
+    emitAndFire(this, 'carousel-slide', { slide: slide + 1, originalEvent: originalEvent });
+}
+
+/**
+   * Toggles the play state of an autoplay carousel.
+   *
+   * @param {MouseEvent} originalEvent
+   */
+function togglePlay(originalEvent) {var _state4 =
+    this.state,config = _state4.config,paused = _state4.paused;
+    config.preserveItems = true;
+    this.setState('paused', !paused);
+    if (paused && !this.isMoving) {
+        this.move(RIGHT);
+    }
+    emitAndFire(this, 'carousel-' + (paused ? 'play' : 'pause'), { originalEvent: originalEvent });
+}
+
+/**
+   * Find the closest item index to the scroll offset and triggers an update.
+   *
+   * @param {number} scrollLeft The current scroll position of the carousel.
+   */
+function handleScroll(scrollLeft) {var
+    state = this.state;var
+    config = state.config,items = state.items,gap = state.gap;
+    var closest = void 0;
+
+    if (scrollLeft >= getMaxOffset(state) - gap) {
+        closest = items.length - 1;
+    } else {
+        // Find the closest item using a binary search on each carousel slide.
+        var itemsPerSlide = state.itemsPerSlide || 1;
+        var totalItems = items.length;
+        var low = 0;
+        var high = Math.ceil(totalItems / itemsPerSlide) - 1;
+
+        while (high - low > 1) {
+            var mid = Math.floor((low + high) / 2);
+            if (scrollLeft > items[mid * itemsPerSlide].left) {
+                low = mid;
+            } else {
+                high = mid;
+            }
+        }
+
+        var deltaLow = Math.abs(scrollLeft - items[low * itemsPerSlide].left);
+        var deltaHigh = Math.abs(scrollLeft - items[high * itemsPerSlide].left);
+        closest = normalizeIndex(state, (deltaLow > deltaHigh ? high : low) * itemsPerSlide);
+    }
+
+    if (state.index !== closest) {
+        config.skipScrolling = true;
+        config.preserveItems = true;
+        this.setState('index', closest);
+        emitAndFire(this, 'carousel-scroll', { index: closest });
+    }
+}
+
+/**
+   * Causes the carousel to move to the provided index.
+   *
+   * @param {-1|1} delta 1 for right and -1 for left.
+   * @return {number} the updated index.
+   */
+function move(delta) {var _this3 = this;var
+    state = this.state;var
+    index = state.index,items = state.items,itemsPerSlide = state.itemsPerSlide,autoplayInterval = state.autoplayInterval,slideWidth = state.slideWidth,gap = state.gap,peek = state.peek,config = state.config;
+    var nextIndex = getNextIndex(state, delta);
+    var offsetOverride = void 0;
+
+    config.preserveItems = true;
+    this.isMoving = true;
+
+    // When we are in autoplay mode we overshoot the desired index to land on a clone
+    // of one of the ends. Then after the transition is over we update to the proper position.
+    if (autoplayInterval) {
+        if (delta === RIGHT && nextIndex < index) {
+            // Transitions to one slide before the beginning.
+            offsetOverride = -slideWidth - gap;
+
+            // Move the items in the last slide to be before the first slide.
+            for (var i = Math.ceil(itemsPerSlide + peek); i--;) {
+                var item = items[items.length - i - 1];
+                item.transform = 'translateX(' + (getMaxOffset(state) + slideWidth + gap) * -1 + 'px)';
+            }
+        } else if (delta === LEFT && nextIndex > index) {
+            // Transitions one slide past the end.
+            offsetOverride = getMaxOffset(state) + slideWidth + gap;
+
+            // Moves the items in the first slide to be after the last slide.
+            for (var _i = Math.ceil(itemsPerSlide + peek); _i--;) {
+                var _item = items[_i];
+                _item.transform = 'translateX(' + (getMaxOffset(state) + slideWidth + gap) + 'px)';
+            }
+        }
+
+        config.offsetOverride = offsetOverride;
+    }
+
+    this.setState('index', nextIndex);
+    this.once('carousel-update', function () {
+        _this3.isMoving = false;
+
+        if (offsetOverride !== undefined) {
+            // If we are in autoplay mode and went outside of the normal offset
+            // We make sure to restore all of the items that got moved around.
+            items.forEach(function (item) {item.transform = undefined;});
+        }
+    });
+
+    return nextIndex;
+}
+
+/**
+   * Given the current widget state, finds the active offset left of the selected item.
+   * Also automatically caps the offset at the max offset.
+   *
+   * @param {object} state The widget state.
+   * @return {number}
+   */
+function getOffset(state) {var
+    items = state.items,index = state.index;
+    if (!items.length) {
+        return 0;
+    }
+    return Math.min(items[index].left, getMaxOffset(state)) || 0;
+}
+
+/**
+   * Given the current widget state, finds the last valid offset.
+   *
+   * @param {object} state The widget state.
+   * @return {number}
+   */
+function getMaxOffset(_ref3) {var items = _ref3.items,slideWidth = _ref3.slideWidth;
+    if (!items.length) {
+        return 0;
+    }
+    return Math.max(items[items.length - 1].right - slideWidth, 0) || 0;
+}
+
+/**
+   * Gets the slide for a given index.
+   * Defaults to the current index if none provided.
+   *
+   * @param {object} state The widget state.
+   * @param {number?} i the index to get the slide for.
+   * @return {number}
+   */
+function getSlide(_ref4) {var index = _ref4.index,itemsPerSlide = _ref4.itemsPerSlide;var i = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : index;
+    if (!itemsPerSlide) {
+        return;
+    }
+
+    return Math.ceil(i / itemsPerSlide);
+}
+
+/**
+   * Ensures that an index is valid.
+   *
+   * @param {object} state The widget state.
+   * @param {number} index the index to normalize.
+   */
+function normalizeIndex(_ref5, index) {var items = _ref5.items,itemsPerSlide = _ref5.itemsPerSlide;
+    var result = index;
+    result %= items.length || 1; // Ensure index is within bounds.
+    result -= result % (itemsPerSlide || 1); // Round index to the nearest valid slide index.
+    result = Math.abs(result); // Ensure positive value.
+    return result;
+}
+
+/**
+   * Calculates the next valid index in a direction.
+   *
+   * @param {object} state The widget state.
+   * @param {-1|1} delta 1 for right and -1 for left.
+   * @return {number}
+   */
+function getNextIndex(state, delta) {var
+    index = state.index,items = state.items,slideWidth = state.slideWidth,itemsPerSlide = state.itemsPerSlide;
+    var i = index;
+    var item = void 0;
+
+    // If going backward from 0, we go to the end.
+    if (delta === LEFT && i === 0) {
+        i = items.length - 1;
+    } else {
+        // Find the index of the next item that is not fully in view.
+        do {
+            item = items[i += delta];
+        } while (item && item.fullyVisible);
+
+        if (delta === LEFT && !itemsPerSlide) {
+            // If going left without items per slide, go as far left as possible while keeping this item fully in view.
+            var targetOffset = item.right - slideWidth;
+            do {
+                item = items[--i];
+            } while (item && item.left >= targetOffset);
+            i += 1;
+        }
+    }
+
+    return normalizeIndex(state, i);
+}
+
+/**
+   * Calls a function on each element within a parent element.
+   *
+   * @param {HTMLElement} parent The parent to walk through.
+   * @param {(el: HTMLElement, i: number) => any} fn The function to call.
+   */
+function forEls(parent, fn) {
+    var i = 0;
+    var child = parent.firstElementChild;
+    while (child) {
+        fn(child, i++);
+        child = child.nextElementSibling;
+    }
+}
+
+/**
+   * Checks if an element is using native scrolling.
+   *
+   * @param {HTMLElement} el the element to check
+   * @return {boolean}
+   */
+function isNativeScrolling(el) {
+    return getComputedStyle(el).overflowX !== 'visible';
+}
+
+module.exports = require('marko-widgets').defineComponent({
+    template: template,
+    getInitialState: getInitialState,
+    getTemplateData: getTemplateData,
+    init: init,
+    onRender: onRender,
+    onBeforeUpdate: cleanupAsync,
+    onBeforeDestroy: cleanupAsync,
+    move: move,
+    handleMove: handleMove,
+    handleDotClick: handleDotClick,
+    togglePlay: togglePlay });

@@ -1,0 +1,41 @@
+<script marko-init>
+    var processHtmlAttributes = require("../../common/html-attributes");
+</script>
+
+<var pointer=(data.pointer || "bottom")/>
+
+<span w-bind>
+    <ebay-tooltip-base
+        w-id="base"
+        type="tourtip"
+        pointer=pointer
+        style-left=data.styleLeft
+        style-top=data.styleTop
+        style-right=data.styleRight
+        style-bottom=data.styleBottom
+        w-on-base-collapse="handleCollapse">
+        <span
+            w-id="expander-root"
+            w-preserve-attrs="class"
+            class="tourtip"
+            ${processHtmlAttributes(data)}>
+            <span
+                if(data.host)
+                w-preserve-attrs="aria-expanded,aria-controls,aria-described-by"
+                class=[data.host.class, 'tourtip__host']
+                style=data.host.style
+                w-body=data.host.renderBody/>
+            <ebay-tooltip-overlay
+                type="tourtip"
+                pointer=pointer
+                style-left=data.styleLeft
+                style-top=data.styleTop
+                style-right=data.styleRight
+                style-bottom=data.styleBottom
+                heading=data.heading
+                content=data.content
+                a11y-close-text=data.a11yCloseText
+                w-on-overlay-close='handleCollapse'/>
+        </span>
+    </ebay-tooltip-base>
+</span>
